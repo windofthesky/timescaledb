@@ -40,7 +40,8 @@ typedef struct ScannerCtx
 	ScannerType scantype;
 	ScanKey		scankey;
 	int			nkeys,
-				norderbys;
+				norderbys,
+				limit;
 	bool		want_itup;
 	LOCKMODE	lockmode;
 	struct

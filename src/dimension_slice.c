@@ -54,18 +54,15 @@ typedef struct DimensionSliceScanData
 {
 	DimensionVec *slices;
 	int			limit;
-} DimensionSliceScanData;
+}	DimensionSliceScanData;
 
 static bool
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionSliceScanData *scandata = data;
+	DimensionVec *slices = data;
 	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
 
-	dimension_vec_add_slice(&scandata->slices, slice);
-
-	if (scandata->limit == ti->count)
-		return false;
+	dimension_vec_add_slice(&slices, slice);
 
 	return true;
 }
@@ -74,7 +71,8 @@ static int
 dimension_slice_scan_limit_internal(ScanKeyData *scankey,
 									Size num_scankeys,
 									tuple_found_func on_tuple_found,
-									void *scandata)
+									void *scandata,
+									int limit)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanCtx = {
@@ -84,6 +82,7 @@ dimension_slice_scan_limit_internal(ScanKeyData *scankey,
 		.nkeys = num_scankeys,
 		.scankey = scankey,
 		.data = scandata,
+		.limit = limit,
 		.tuple_found = on_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
@@ -101,10 +100,7 @@ DimensionVec *
 dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionSliceScanData data = {
-		.slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE),
-		.limit = limit,
-	};
+	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	/*
 	 * Perform an index scan for slices matching the dimension's ID and which
@@ -117,9 +113,9 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &data);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, slices, limit);
 
-	return dimension_vec_sort(&data.slices);
+	return dimension_vec_sort(&slices);
 }
 
 /*
@@ -131,10 +127,7 @@ DimensionVec *
 dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionSliceScanData data = {
-		.slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE),
-		.limit = limit,
-	};
+	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -143,9 +136,9 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 			  BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &data);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, slices, limit);
 
-	return dimension_vec_sort(&data.slices);
+	return dimension_vec_sort(&slices);
 }
 
 
@@ -174,7 +167,7 @@ dimension_slice_scan_for_existing(DimensionSlice *slice)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 		BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_slice_fill, &slice);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_slice_fill, &slice, 1);
 
 	return slice;
 }
@@ -201,6 +194,7 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &slice,
+		.limit = 1,
 		.tuple_found = dimension_slice_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
