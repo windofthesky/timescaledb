@@ -35,13 +35,11 @@ chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 {
 	Chunk	   *chunk;
 
-	chunk = palloc0(CHUNK_SIZE(num_constraints));
-	chunk->capacity = num_constraints;
-	chunk->num_constraints = 0;
-
+	chunk = palloc0(sizeof(Chunk));
+	chunk->num_constraints = num_constraints;
 	chunk_fill(chunk, tuple);
 
-	chunk_constraint_scan_by_chunk_id(chunk);
+	chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints);
 	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
 
 	return chunk;
@@ -138,6 +136,55 @@ do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
 			dimension_slices_collide(cube_slice, chunk_slice))
 			dimension_slice_cut(cube_slice, chunk_slice, coord);
 	}
+
+	return true;
+}
+
+/*
+ * Calculate, and potentially set, a new chunk interval for an open dimension.
+ *
+ *
+ */
+static bool
+calculate_and_set_new_chunk_interval(Hypertable *ht)
+{
+	Hyperspace *hs = ht->space;
+	Dimension  *dim = NULL;
+	Datum		datum;
+	int64		chunk_interval;
+	int			i;
+
+	if (!OidIsValid(ht->fd.chunk_sizing_func) ||
+		ht->fd.chunk_target_size <= 0)
+		return -1;
+
+	/* Find first open dimension */
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		dim = &hs->dimensions[i];
+
+		if (IS_OPEN_DIMENSION(dim))
+			break;
+
+		dim = NULL;
+	}
+
+	/* Nothing to do if no open dimension */
+	if (NULL == dim)
+		return false;
+
+	datum = OidFunctionCall2(ht->fd.chunk_sizing_func, dim->fd.id, ht->fd.chunk_target_size);
+	chunk_interval = DatumGetInt64(datum);
+
+	/* Check if the function didn't set and interval or nothing changed */
+	if (chunk_interval <= 0 || chunk_interval == dim->fd.interval_length)
+		return false;
+
+	/* Update the dimension */
+	dim->fd.interval_length = chunk_interval;
+
+	/* Update the dimension table */
+	dimension_update(dim);
 
 	return true;
 }
@@ -259,14 +306,21 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 }
 
 static Chunk *
-chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Oid			schema_oid = get_namespace_oid(schema, false);
 	Catalog    *catalog = catalog_get();
+	Hyperspace *hs = ht->space;
 	CatalogSecurityContext sec_ctx;
 	Hypercube  *cube;
 	Chunk	   *chunk;
 	int			i;
+
+	/*
+	 * If the user has set a function to adaptively set chunk intervals, call
+	 * that function here and set the new interval
+	 */
+	calculate_and_set_new_chunk_interval(ht);
 
 	catalog_become_owner(catalog, &sec_ctx);
 
@@ -278,9 +332,9 @@ chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char
 
 	/* Create a new chunk based on the hypercube */
 	chunk = chunk_create_stub(catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	chunk->num_constraints = hs->num_dimensions;
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
-	chunk->num_constraints = chunk->capacity;
 	namestrcpy(&chunk->fd.schema_name, schema);
 
 	snprintf(chunk->fd.table_name.data, NAMEDATALEN,
@@ -310,7 +364,7 @@ chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char
 }
 
 Chunk *
-chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Catalog    *catalog = catalog_get();
 	Chunk	   *chunk;
@@ -319,10 +373,10 @@ chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
 	rel = heap_open(catalog->tables[CHUNK].id, ExclusiveLock);
 
 	/* Recheck if someone else created the chunk before we got the table lock */
-	chunk = chunk_find(hs, p);
+	chunk = chunk_find(ht->space, p);
 
 	if (NULL == chunk)
-		chunk = chunk_create_after_lock(hs, p, schema, prefix);
+		chunk = chunk_create_after_lock(ht, p, schema, prefix);
 
 	heap_close(rel, ExclusiveLock);
 
@@ -336,8 +390,8 @@ chunk_create_stub(int32 id, int16 num_constraints)
 {
 	Chunk	   *chunk;
 
-	chunk = palloc0(CHUNK_SIZE(num_constraints));
-	chunk->capacity = num_constraints;
+	chunk = palloc0(sizeof(Chunk));
+	chunk->constraints = palloc0(sizeof(ChunkConstraint) * num_constraints);
 	chunk->num_constraints = 0;
 	chunk->fd.id = id;
 
@@ -347,10 +401,10 @@ chunk_create_stub(int32 id, int16 num_constraints)
 static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
-	Chunk	   *chunk = arg;
+	Chunk	   *chunks = arg;
 
-	chunk_fill(chunk, ti->tuple);
-	return false;
+	chunk_fill(&chunks[ti->count - 1], ti->tuple);
+	return true;
 }
 
 /* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
@@ -405,9 +459,6 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 bool
 chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint)
 {
-	if (chunk->capacity == chunk->num_constraints)
-		return false;
-
 	memcpy(&chunk->constraints[chunk->num_constraints++], constraint, sizeof(ChunkConstraint));
 	return true;
 }
@@ -415,9 +466,6 @@ chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint)
 bool
 chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple)
 {
-	if (chunk->capacity == chunk->num_constraints)
-		return false;
-
 	memcpy(&chunk->constraints[chunk->num_constraints++],
 		   GETSTRUCT(constraint_tuple), sizeof(FormData_chunk_constraint));
 	return true;
@@ -652,13 +700,15 @@ Chunk *
 chunk_copy(Chunk *chunk)
 {
 	Chunk	   *copy;
-	size_t		nbytes = CHUNK_SIZE(chunk->capacity);
 
-	copy = palloc(nbytes);
-	memcpy(copy, chunk, nbytes);
+	copy = palloc(sizeof(Chunk));
+	memcpy(copy, chunk, sizeof(Chunk));
 
 	if (NULL != chunk->cube)
 		copy->cube = hypercube_copy(chunk->cube);
+
+	if (NULL != chunk->constraints)
+		copy->constraints = chunk_constraint_copy(chunk->constraints, chunk->num_constraints);
 
 	return copy;
 }

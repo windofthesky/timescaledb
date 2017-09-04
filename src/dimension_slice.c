@@ -75,7 +75,7 @@ dimension_slice_scan_limit_internal(ScanKeyData *scankey,
 									int limit)
 {
 	Catalog    *catalog = catalog_get();
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
 		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX],
 		.scantype = ScannerTypeIndex,
@@ -88,7 +88,7 @@ dimension_slice_scan_limit_internal(ScanKeyData *scankey,
 		.scandirection = ForwardScanDirection,
 	};
 
-	return scanner_scan(&scanCtx);
+	return scanner_scan(&scanctx);
 }
 
 /*
@@ -187,7 +187,7 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 	Catalog    *catalog = catalog_get();
 	DimensionSlice *slice = NULL;
 	ScanKeyData scankey[1];
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
 		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_ID_IDX],
 		.scantype = ScannerTypeIndex,
@@ -202,7 +202,7 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_idx_dimension_id,
 		 BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_slice_id));
-	scanner_scan(&scanCtx);
+	scanner_scan(&scanctx);
 
 	return slice;
 }

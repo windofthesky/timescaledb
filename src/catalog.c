@@ -55,7 +55,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CHUNK_INDEX,
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
-			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
+			[CHUNK_HYPERTABLE_ID_CHUNK_ID_INDEX] = "chunk_hypertable_id_id_idx",
 		}
 	},
 	[CHUNK_CONSTRAINT] = {
@@ -351,4 +351,13 @@ catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *null
 
 	catalog_insert(rel, tuple);
 	heap_freetuple(tuple);
+}
+
+void
+catalog_update(Relation rel, ItemPointer otid, HeapTuple tuple)
+{
+	simple_heap_update(rel, otid, tuple);
+	CatalogUpdateIndexes(rel, tuple);
+	/* Make changes visible */
+	CommandCounterIncrement();
 }

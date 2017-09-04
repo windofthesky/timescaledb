@@ -19,7 +19,9 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     associated_table_prefix NAME = NULL,
     chunk_time_interval     BIGINT = NULL,
     create_default_indexes  BOOLEAN = TRUE,
-    if_not_exists           BOOLEAN = FALSE
+    if_not_exists           BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
     SECURITY DEFINER SET search_path = ''
@@ -37,6 +39,7 @@ DECLARE
     is_hypertable              BOOLEAN;
     chunk_time_interval_actual BIGINT;
     time_type                  REGTYPE;
+    chunk_target_size_bytes    BIGINT = NULL;
 BEGIN
     SELECT relname, nspname, reltablespace
     INTO STRICT table_name, schema_name, tablespace_oid
@@ -90,9 +93,22 @@ BEGIN
     FROM pg_attribute
     WHERE attrelid = main_table AND attname = time_column_name;
 
+    IF chunk_target_size IS NOT NULL THEN
+        chunk_target_size_bytes = _timescaledb_internal.convert_text_memory_amount_to_bytes(chunk_target_size);
+    END IF;
+
     -- Timestamp types can use default value, integral should be an error if NULL
     IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') AND chunk_time_interval IS NULL THEN
-        chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
+        -- If user requested adaptive chunk sizing, default to a short
+        -- 1 day chunk time interval
+        IF chunk_sizing_func IS NOT NULL AND
+            chunk_sizing_func <> 0 AND
+            chunk_target_size_bytes IS NOT NULL AND
+            chunk_target_size_bytes > 0 THEN
+            chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 day');
+        ELSE
+            chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
+        END IF;
     ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') AND chunk_time_interval IS NULL THEN
         RAISE EXCEPTION 'chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT'
         USING ERRCODE = 'IO102';
@@ -122,6 +138,8 @@ BEGIN
             associated_schema_name,
             associated_table_prefix,
             chunk_time_interval_actual,
+            chunk_sizing_func,
+            chunk_target_size_bytes,
             tablespace_name
         );
     EXCEPTION
@@ -165,6 +183,46 @@ BEGIN
     IF create_default_indexes THEN
         PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
     END IF;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION  set_adaptive_chunk_sizing(
+    hypertable                     REGCLASS,
+    chunk_target_size              TEXT,
+    INOUT chunk_sizing_func        REGPROC = '_timescaledb_internal.calculate_chunk_interval',
+    OUT chunk_target_size_bytes    BIGINT
+)
+    LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = '' AS
+$BODY$
+DECLARE
+    hypertable_row              _timescaledb_catalog.hypertable;
+BEGIN
+    hypertable_row := _timescaledb_internal.get_hypertable(hypertable);
+
+    IF chunk_target_size IS NULL THEN
+        -- disable adaptive chunk sizing
+        chunk_target_size_bytes = 0;
+    ELSE
+        chunk_target_size_bytes = _timescaledb_internal.convert_text_memory_amount_to_bytes(chunk_target_size);
+
+        IF chunk_target_size_bytes <= 0 THEN
+            -- estimate the target size
+            chunk_target_size_bytes = _timescaledb_internal.calculate_initial_chunk_target_size();
+        END IF;
+    END IF;
+
+    IF chunk_sizing_func IS NULL THEN
+        -- disable adaptive chunk sizing
+        chunk_sizing_func = 0;
+    ELSE
+        PERFORM _timescaledb_internal.verify_chunk_sizing_func_signature(chunk_sizing_func);
+    END IF;
+
+    UPDATE _timescaledb_catalog.hypertable h
+    SET chunk_target_size = chunk_target_size_bytes,
+        chunk_sizing_func = set_adaptive_chunk_sizing.chunk_sizing_func
+    WHERE h.id = hypertable_row.id;
 END
 $BODY$;
 

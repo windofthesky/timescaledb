@@ -2,7 +2,8 @@
 \ir include/insert_two_partitions.sql
 \o
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.chunk;
 \dt "_timescaledb_internal".*
 SELECT * FROM "two_Partitions";
@@ -10,7 +11,8 @@ SELECT * FROM "two_Partitions";
 SET client_min_messages = WARNING;
 TRUNCATE "two_Partitions";
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.chunk;
 
 -- should be empty
@@ -20,5 +22,3 @@ SELECT * FROM _timescaledb_catalog.chunk;
 
 \d+ "two_Partitions"
 SELECT * FROM "two_Partitions";
-
-

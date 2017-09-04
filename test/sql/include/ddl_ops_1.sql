@@ -30,7 +30,8 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 
 SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.hypertable_index ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");

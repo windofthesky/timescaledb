@@ -15,7 +15,8 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
   1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2
@@ -51,7 +52,8 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
   1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2

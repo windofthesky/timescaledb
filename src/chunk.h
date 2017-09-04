@@ -11,6 +11,7 @@
 
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
+typedef struct Hypertable Hypertable;
 typedef struct Hyperspace Hyperspace;
 
 /*
@@ -27,18 +28,15 @@ typedef struct Chunk
 	Oid			table_id;
 
 	/*
-	 * The hypercube defines the chunks position in the N-dimensional space.
+	 * The hypercube defines the chunk's position in the N-dimensional space.
 	 * Each of the N slices in the cube corresponds to a constraint on the
 	 * chunk table.
 	 */
 	Hypercube  *cube;
-	int16		capacity;
 	int16		num_constraints;
-	ChunkConstraint constraints[0];
+	int16		constraint_capacity;
+	ChunkConstraint *constraints;
 } Chunk;
-
-#define CHUNK_SIZE(num_constraints)								\
-	(sizeof(Chunk) + sizeof(ChunkConstraint) * (num_constraints))
 
 /*
  * ChunkScanCtx is used to scan for chunks in a hypertable's N-dimensional
@@ -64,7 +62,7 @@ typedef struct ChunkScanEntry
 } ChunkScanEntry;
 
 extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
-extern Chunk *chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix);
+extern Chunk *chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);
 extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);

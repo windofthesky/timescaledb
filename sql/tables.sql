@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     associated_schema_name  NAME      NOT NULL,
     associated_table_prefix NAME      NOT NULL,
     num_dimensions          SMALLINT  NOT NULL CHECK (num_dimensions > 0),
+    chunk_sizing_func       OID       NOT NULL,
+    chunk_target_size       BIGINT    NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
     UNIQUE (id, schema_name), -- So hypertable_index can use it as foreign key
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)
@@ -110,7 +112,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     table_name      NAME    NOT NULL,
     UNIQUE (schema_name, table_name)
 );
-CREATE INDEX ON _timescaledb_catalog.chunk(hypertable_id);
+CREATE INDEX ON _timescaledb_catalog.chunk(hypertable_id, id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 

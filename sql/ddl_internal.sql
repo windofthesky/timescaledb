@@ -9,6 +9,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
     associated_schema_name   NAME,
     associated_table_prefix  NAME,
     chunk_time_interval      BIGINT,
+    chunk_sizing_func        REGPROC,
+    chunk_target_size        BIGINT,
     tablespace               NAME
 )
     RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
@@ -39,18 +41,45 @@ BEGIN
         USING ERRCODE ='IO101';
     END IF;
 
+    -- Settings for adaptive chunk sizing
+    IF chunk_sizing_func IS NULL THEN
+        chunk_sizing_func := 0;
+    ELSE
+        PERFORM _timescaledb_internal.verify_chunk_sizing_func_signature(chunk_sizing_func);
+    END IF;
+
+    IF chunk_target_size IS NULL THEN
+        chunk_target_size := 0;
+    ELSE
+        IF chunk_target_size = 0 THEN
+            chunk_target_size = _timescaledb_internal.calculate_initial_chunk_target_size();
+        END IF;
+    END IF;
+
     INSERT INTO _timescaledb_catalog.hypertable (
-        id, schema_name, table_name,
-        associated_schema_name, associated_table_prefix, num_dimensions)
+        id,
+        schema_name,
+        table_name,
+        associated_schema_name,
+        associated_table_prefix,
+        num_dimensions,
+        chunk_sizing_func,
+        chunk_target_size)
     VALUES (
-        id, schema_name, table_name,
-        associated_schema_name, associated_table_prefix, 1
+        id,
+        schema_name,
+        table_name,
+        associated_schema_name,
+        associated_table_prefix,
+        1,
+        chunk_sizing_func,
+        chunk_target_size
     )
     RETURNING * INTO hypertable_row;
 
     --add default tablespace, if any
     IF tablespace IS NOT NULL THEN
-       PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
+        PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
     END IF;
 
     --create time dimension
@@ -123,8 +152,8 @@ BEGIN
             RAISE EXCEPTION 'illegal type for column "%": %', column_name, column_type
             USING ERRCODE = 'IO102';
         END IF;
-        IF column_type = 'DATE'::regtype AND 
-            (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0) 
+        IF column_type = 'DATE'::regtype AND
+            (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0)
             THEN
             RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
             USING ERRCODE = 'IO102';
@@ -184,6 +213,29 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_hypertable(
+    hypertable    REGCLASS
+)
+    RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    hypertable_row    _timescaledb_catalog.hypertable;
+BEGIN
+    BEGIN
+        SELECT h.*
+        FROM pg_class c, pg_namespace n, _timescaledb_catalog.hypertable h
+        WHERE c.OID = hypertable
+        AND n.nspname = h.schema_name
+        AND c.relname = h.table_name
+        INTO STRICT hypertable_row;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'Hypertable "%" does not exist', hypertable
+            USING ERRCODE = 'IO102';
+    END;
+    RETURN hypertable_row;
+END
+$BODY$;
 
 -- Add an index to a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.add_index(
@@ -199,7 +251,7 @@ VALUES (hypertable_id, main_schema_name, main_index_name, definition);
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.trigger_is_row_trigger(tgtype int2) RETURNS BOOLEAN
-	AS '$libdir/timescaledb', 'trigger_is_row_trigger' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'trigger_is_row_trigger' LANGUAGE C IMMUTABLE STRICT;
 
 -- do I need to add a hypertable trigger to the chunks?
 CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_trigger(
@@ -249,7 +301,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_hypertable(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-BEGIN 
+BEGIN
     PERFORM _timescaledb_internal.drop_chunk(c.id, is_cascade)
     FROM _timescaledb_catalog.hypertable h
     INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)

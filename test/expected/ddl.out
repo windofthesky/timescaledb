@@ -46,7 +46,8 @@ SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name  |  table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+--------------+--------------+------------------------+-------------------------+----------------
   1 | public       | Hypertable_1 | _timescaledb_internal  | _hyper_1                |              2
@@ -93,13 +94,13 @@ SELECT * FROM _timescaledb_catalog.hypertable_index  ORDER BY format('%I.%I', ma
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "10-Unique1"
+psql:include/ddl_ops_1.sql:58: ERROR:  duplicate key value violates unique constraint "10-Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the column: Device_id (used in partitioning)
+psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the column: Device_id (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+psql:include/ddl_ops_1.sql:61: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
@@ -124,7 +125,7 @@ Indexes:
 -- Should error when adding again
 \set ON_ERROR_STOP 0
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
+psql:include/ddl_ops_1.sql:74: ERROR:  column "val2" of relation "my_ht" already exists
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -141,7 +142,7 @@ Indexes:
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+psql:include/ddl_ops_1.sql:82: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 \d my_ht
      Table "public.my_ht"
  Column |  Type   | Modifiers 
@@ -167,7 +168,7 @@ Indexes:
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+psql:include/ddl_ops_1.sql:90: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 \d my_ht
      Table "public.my_ht"
  Column |  Type   | Modifiers 

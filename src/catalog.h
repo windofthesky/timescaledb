@@ -74,6 +74,8 @@ enum Anum_hypertable
 	Anum_hypertable_associated_schema_name,
 	Anum_hypertable_associated_table_prefix,
 	Anum_hypertable_num_dimensions,
+	Anum_hypertable_chunk_sizing_func,
+	Anum_hypertable_chunk_target_size,
 	_Anum_hypertable_max,
 };
 
@@ -88,6 +90,8 @@ typedef struct FormData_hypertable
 	NameData	associated_schema_name;
 	NameData	associated_table_prefix;
 	int16		num_dimensions;
+	Oid			chunk_sizing_func;
+	int64		chunk_target_size;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -118,7 +122,6 @@ enum
 	HYPERTABLE_NAME_INDEX,
 	_MAX_HYPERTABLE_INDEX,
 };
-
 
 /******************************
  *
@@ -161,6 +164,15 @@ typedef struct FormData_dimension
 } FormData_dimension;
 
 typedef FormData_dimension *Form_dimension;
+
+enum Anum_dimension_id_idx
+{
+	Anum_dimension_id_idx_dimension_id = 1,
+	_Anum_dimension_id_idx_max,
+};
+
+#define Natts_dimension_id_idx \
+	(_Anum_dimension_id_idx_max - 1)
 
 enum Anum_dimension_hypertable_id_idx
 {
@@ -266,8 +278,14 @@ typedef FormData_chunk *Form_chunk;
 enum
 {
 	CHUNK_ID_INDEX = 0,
-	CHUNK_HYPERTABLE_ID_INDEX,
+	CHUNK_HYPERTABLE_ID_CHUNK_ID_INDEX,
 	_MAX_CHUNK_INDEX,
+};
+
+enum Anum_chunk_hypertable_id_chunk_id_idx
+{
+	Anum_chunk_hypertable_id_chunk_id_idx_hypertable_id = 1,
+	Anum_chunk_hypertable_id_chunk_id_idx_chunk_id,
 };
 
 /************************************
@@ -382,5 +400,6 @@ int64		catalog_table_next_seq_id(Catalog *catalog, enum CatalogTable table);
 
 void		catalog_insert(Relation rel, HeapTuple tuple);
 void		catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls);
+void		catalog_update(Relation rel, ItemPointer otid, HeapTuple tuple);
 
 #endif   /* TIMESCALEDB_CATALOG_H */

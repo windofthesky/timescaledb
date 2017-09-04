@@ -27,10 +27,9 @@ chunk_constraint_for_dimension_slice(TupleInfo *ti, void *data)
 static bool
 chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
-	Chunk	   *chunk = data;
+	ChunkConstraint *constraints = data;
 
-	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
-
+	chunk_constraint_fill(&constraints[ti->count - 1], ti->tuple);
 	return true;
 }
 
@@ -40,37 +39,35 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
  * Memory for the constraints is already allocated in the chunk, so this simply
  * fills in the data in the chunk's constraints array.
  */
-Chunk *
-chunk_constraint_scan_by_chunk_id(Chunk *chunk)
+ChunkConstraint *
+chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints)
 {
 	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
 	int			num_found;
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
 		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
-		.limit = chunk->num_constraints,
-		.data = chunk,
+		.limit = num_constraints,
+		.data = palloc(sizeof(ChunkConstraint) * num_constraints),
 		.filter = chunk_constraint_for_dimension_slice,
 		.tuple_found = chunk_constraint_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
-	chunk->num_constraints = 0;
-
 	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
-				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk_id));
 
-	num_found = scanner_scan(&scanCtx);
+	num_found = scanner_scan(&scanctx);
 
-	if (num_found != chunk->num_constraints)
-		elog(ERROR, "Unexpected number of constraints found for chunk %d", chunk->fd.id);
+	if ((Size) num_found != num_constraints)
+		elog(ERROR, "Unexpected number of constraints found for chunk %d", chunk_id);
 
-	return chunk;
+	return scanctx.data;
 }
 
 typedef struct ChunkConstraintScanData
@@ -130,7 +127,7 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 		.scanctx = ctx,
 		.slice = slice,
 	};
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
 		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],
 		.scantype = ScannerTypeIndex,
@@ -146,7 +143,7 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.id));
 
-	num_found = scanner_scan(&scanCtx);
+	num_found = scanner_scan(&scanctx);
 
 	return num_found;
 }
@@ -187,4 +184,13 @@ chunk_constraint_insert_multi(ChunkConstraint *constraints, Size num_constraints
 		chunk_constraint_insert_relation(rel, &constraints[i]);
 
 	heap_close(rel, RowExclusiveLock);
+}
+
+ChunkConstraint *
+chunk_constraint_copy(ChunkConstraint *constraints, Size num_constraints)
+{
+	ChunkConstraint *copy = palloc(sizeof(ChunkConstraint) * num_constraints);
+
+	memcpy(copy, constraints, sizeof(ChunkConstraint) * num_constraints);
+	return copy;
 }

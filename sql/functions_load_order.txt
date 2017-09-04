@@ -20,3 +20,4 @@ sql/time_bucket.sql
 sql/version.sql
 sql/cache_functions.sql
 sql/size_utils.sql
+sql/util_misc.sql

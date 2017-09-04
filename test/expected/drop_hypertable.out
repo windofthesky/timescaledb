@@ -6,7 +6,8 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
-SELECT * from _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+from _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
 (0 rows)
@@ -74,7 +75,8 @@ NOTICE:  hypertable public.should_drop already exists, skipping
  
 (1 row)
 
-SELECT * from _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+from _timescaledb_catalog.hypertable;
  id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+-------------+------------------------+-------------------------+----------------
   1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1
@@ -95,7 +97,8 @@ SELECT create_hypertable('should_drop', 'time');
 (1 row)
 
 INSERT INTO should_drop VALUES (now(), 1.0);
-SELECT * from _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+from _timescaledb_catalog.hypertable;
  id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+-------------+------------------------+-------------------------+----------------
   4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1

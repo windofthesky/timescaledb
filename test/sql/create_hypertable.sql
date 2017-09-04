@@ -15,7 +15,8 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 2);
-select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+select  id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 \set ON_ERROR_STOP 0
 -- get_create_command only works on tables w/ 1 or 2 dimensions
@@ -24,7 +25,8 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
-select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+select  id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
 \set ON_ERROR_STOP 0

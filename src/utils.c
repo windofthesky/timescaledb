@@ -8,6 +8,7 @@
 #include <catalog/namespace.h>
 #include <utils/guc.h>
 #include <utils/date.h>
+#include <utils/builtins.h>
 
 #include "utils.h"
 #include "nodes/nodes.h"
@@ -137,45 +138,36 @@ pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
 
-
-/*	*/
 int64
 time_value_to_internal(Datum time_val, Oid type)
 {
-	if (type == INT8OID)
+	switch (type)
 	{
-		return DatumGetInt64(time_val);
+		case INT8OID:
+			return DatumGetInt64(time_val);
+		case INT4OID:
+			return DatumGetInt32(time_val);
+		case INT2OID:
+			return DatumGetInt16(time_val);
+		case DATEOID:
+			time_val = DirectFunctionCall1(date_timestamptz, time_val);
+			return DatumGetInt64(DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val));
+		case TIMESTAMPOID:
+			time_val = DirectFunctionCall1(timestamp_timestamptz, time_val);
+			/* Fall through */
+		case TIMESTAMPTZOID:
+			return DatumGetInt64(DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val));
+		default:
+			elog(ERROR, "unkown time type oid '%d'", type);
 	}
-	if (type == INT4OID)
-	{
-		return (int64) DatumGetInt32(time_val);
-	}
-	if (type == INT2OID)
-	{
-		return (int64) DatumGetInt16(time_val);
-	}
-	if (type == TIMESTAMPOID)
-	{
-		Datum		tz = DirectFunctionCall1(timestamp_timestamptz, time_val);
-		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, tz);
+}
 
-		return DatumGetInt64(res);
-	}
-	if (type == TIMESTAMPTZOID)
-	{
-		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val);
+PG_FUNCTION_INFO_V1(to_internal_time);
 
-		return DatumGetInt64(res);
-	}
-	if (type == DATEOID)
-	{
-		Datum		tz = DirectFunctionCall1(date_timestamptz, time_val);
-		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, tz);
-
-		return DatumGetInt64(res);
-	}
-
-	elog(ERROR, "unkown time type oid '%d'", type);
+Datum
+to_internal_time(PG_FUNCTION_ARGS)
+{
+	return time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0));
 }
 
 /* Make a RangeVar from a regclass Oid */
@@ -357,6 +349,7 @@ date_bucket(PG_FUNCTION_ARGS)
 	return DirectFunctionCall1(timestamp_date, bucketed);
 }
 
+
 PG_FUNCTION_INFO_V1(trigger_is_row_trigger);
 
 Datum
@@ -365,4 +358,115 @@ trigger_is_row_trigger(PG_FUNCTION_ARGS)
 	int16		tgtype = PG_GETARG_INT16(0);
 
 	PG_RETURN_BOOL(TRIGGER_FOR_ROW(tgtype));
+}
+
+#if defined(WIN32)
+#include "windows.h"
+static int64
+system_memory_bytes(void)
+{
+	MEMORYSTATUSEX status;
+
+	status.dwLength = sizeof(status);
+	GlobalMemoryStatusEx(&status);
+
+	return status.ullTotalPhys;
+}
+#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
+static int64
+system_memory_bytes(void)
+{
+	int64		bytes;
+
+	bytes = sysconf(_SC_PHYS_PAGES);
+	bytes *= sysconf(_SC_PAGESIZE);
+
+	return bytes;
+}
+#else
+#error Unsupported platform
+#endif
+
+/*
+ * Estimate the effective memory available to PostgreSQL based on the settings
+ * of 'shared_buffers' and 'effective_cache_size'.
+ *
+ * Although we could rely solely on something like sysconf() to get the actual
+ * system memory available, PostgreSQL will still be bound by 'shared_buffers'
+ * and 'effective_cache_size' so might not effectively use the full memory on
+ * the system anyway.
+ *
+ * If accurately set, 'effective_cache_size' is probably the best value to use
+ * since it provides an estimate of the combined memory in both the shared
+ * buffers and disk cache. A conservative setting of 'effective_cache_size' is
+ * typically 1/2 the memory of the system, while a common recommended setting
+ * for 'shared_buffers' is 1/4 of system memory. The caveat here is that it is
+ * much more common to set 'shared_buffers', so therefore we try to use the max
+ * of 'effective_cache_size' and twice the 'shared_buffers'.
+ */
+static int64
+estimate_effective_memory(void)
+{
+	const char *val;
+	const char *hintmsg;
+	int			shared_buffers,
+				effective_cache_size;
+	int64		memory_bytes;
+	int64		sysmem_bytes = system_memory_bytes();
+
+	val = GetConfigOption("shared_buffers", false, false);
+
+	if (NULL == val)
+		elog(ERROR, "Missing configuration for 'shared_buffers'");
+
+	if (!parse_int(val, &shared_buffers, GUC_UNIT_BLOCKS, &hintmsg))
+		elog(ERROR, "Could not parse 'shared_buffers' setting: %s", hintmsg);
+
+	val = GetConfigOption("effective_cache_size", false, false);
+
+	if (NULL == val)
+		elog(ERROR, "Missing configuration for 'effective_cache_size'");
+
+	if (!parse_int(val, &effective_cache_size, GUC_UNIT_BLOCKS, &hintmsg))
+		elog(ERROR, "Could not parse 'effective_cache_size' setting: %s", hintmsg);
+
+	memory_bytes = Max((int64) shared_buffers * 4, (int64) effective_cache_size * 2);
+
+	/* Both values are in blocks, so convert to bytes */
+	memory_bytes *= BLCKSZ;
+
+	if (memory_bytes > sysmem_bytes)
+		memory_bytes = sysmem_bytes;
+
+	return memory_bytes;
+}
+
+PG_FUNCTION_INFO_V1(estimate_effective_memory_bytes);
+
+Datum
+estimate_effective_memory_bytes(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT64(estimate_effective_memory());
+}
+
+PG_FUNCTION_INFO_V1(convert_text_memory_amount_to_bytes);
+
+Datum
+convert_text_memory_amount_to_bytes(PG_FUNCTION_ARGS)
+{
+	const char *val = text_to_cstring(PG_GETARG_TEXT_P(0));
+	const char *hintmsg;
+	int			nblocks;
+	int64		bytes;
+
+	if (!parse_int(val, &nblocks, GUC_UNIT_BLOCKS, &hintmsg))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("Invalid data amount"),
+				 errhint("%s", hintmsg)));
+
+	bytes = nblocks;
+	bytes *= BLCKSZ;
+
+	PG_RETURN_INT64(bytes);
 }

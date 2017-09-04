@@ -37,7 +37,8 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+----------------+------------------------+-------------------------+----------------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2
@@ -81,7 +82,8 @@ SELECT * FROM "two_Partitions";
 
 SET client_min_messages = WARNING;
 TRUNCATE "two_Partitions";
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+----------------+------------------------+-------------------------+----------------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2

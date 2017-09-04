@@ -5,7 +5,8 @@
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
 SELECT * FROM drop_test;
 
@@ -26,7 +27,8 @@ CREATE EXTENSION timescaledb;
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');
 SELECT * FROM drop_test;
 

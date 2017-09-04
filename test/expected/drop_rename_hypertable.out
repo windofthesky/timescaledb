@@ -318,7 +318,7 @@ Check constraints:
     "constraint_5" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
 Inherits: "two_Partitions"
 
--- Test that renaming hypertable works 
+-- Test that renaming hypertable works
 \d _timescaledb_internal._hyper_1_1_chunk
 Table "_timescaledb_internal._hyper_1_1_chunk"
    Column    |       Type       | Modifiers 
@@ -360,7 +360,8 @@ SELECT * FROM "newname";
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 (12 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
   1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2
@@ -385,7 +386,8 @@ SELECT * FROM "newschema"."newname";
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 (12 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
   1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2
@@ -401,14 +403,16 @@ SELECT * FROM _timescaledb_catalog.chunk_index WHERE main_schema_name <> 'newsch
 ----+-------------+------------+------------+------------------+-----------------+------------
 (0 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
   1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2
 (1 row)
 
 DROP TABLE "newschema"."newname";
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
+FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
 (0 rows)
