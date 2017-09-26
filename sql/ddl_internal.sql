@@ -499,7 +499,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
-AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C IMMUTABLE STRICT;
+AS '@MODULE_PATHNAME@', 'indexing_verify_hypertable_indexes' LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql

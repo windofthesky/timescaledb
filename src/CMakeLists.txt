@@ -114,9 +114,11 @@ add_custom_command(
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${HEADERS} ${GITCOMMIT_H})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-    OUTPUT_NAME ${PROJECT_NAME}
+    OUTPUT_NAME ${PROJECT_NAME}-${PROJECT_VERSION_MOD}
     PREFIX "")
 
 install(
   TARGETS ${PROJECT_NAME}
   DESTINATION ${PG_PKGLIBDIR})
+
+add_subdirectory(loader)
