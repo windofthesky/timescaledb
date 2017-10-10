@@ -24,7 +24,8 @@ ORDER BY proname;
  indexes_relation_size
  indexes_relation_size_pretty
  last
+ reindex_chunk
  set_chunk_time_interval
  time_bucket
-(15 rows)
+(16 rows)
 

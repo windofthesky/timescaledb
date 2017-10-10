@@ -98,3 +98,44 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_specification_to_internal(
+    time_type REGTYPE,
+    specification anyelement,
+    field_name TEXT
+)
+RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    IF specification IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') THEN
+        IF pg_typeof(specification) IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') THEN
+            RETURN _timescaledb_internal.to_unix_microseconds(specification::TIMESTAMPTZ);
+        ELSE
+            RAISE EXCEPTION '% needs to be of type TIMESTAMP, TIMESTAMPTZ, or DATE', field_name
+            USING ERRCODE = 'IO102';
+        END IF;
+    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') THEN
+        IF pg_typeof(specification) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
+            --bounds check
+            IF time_type = 'INTEGER'::REGTYPE AND specification > 2147483647 THEN
+                RAISE EXCEPTION '% is too large for type INTEGER (max: 2147483647)', field_name
+                USING ERRCODE = 'IO102';
+            ELSIF time_type = 'SMALLINT'::REGTYPE AND specification > 65535 THEN
+                RAISE EXCEPTION '% is too large for type SMALLINT (max: 65535)', field_name
+                USING ERRCODE = 'IO102';
+            END IF;
+            RETURN specification::BIGINT;
+        ELSE
+            RAISE EXCEPTION '% needs to be of type SMALLINT, INTEGER, and BIGINT', field_name
+            USING ERRCODE = 'IO102';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unknown time column type: %', time_type
+        USING ERRCODE = 'IO102';
+    END IF;
+END
+$BODY$;

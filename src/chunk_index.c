@@ -34,6 +34,40 @@ create_index_colnames(Relation indexrel)
 	return colnames;
 }
 
+static Oid
+get_constraint_oid(Relation index_rel)
+{
+	Oid			index_oid = RelationGetRelid(index_rel);
+	Relation	conrel;
+	SysScanDesc conscan;
+	ScanKeyData skey[1];
+	HeapTuple	htup;
+	Oid			constraint_oid = InvalidOid;
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(index_rel->rd_index->indrelid));
+
+	conrel = heap_open(ConstraintRelationId, AccessShareLock);
+	conscan = systable_beginscan(conrel, ConstraintRelidIndexId, true,
+								 NULL, 1, skey);
+
+	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	{
+		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
+
+		if (conform->conindid == index_oid)
+		{
+			constraint_oid = HeapTupleGetOid(htup);
+		}
+	}
+
+	systable_endscan(conscan);
+	heap_close(conrel, AccessShareLock);
+	return constraint_oid;
+}
+
 /*
  * Get the relation's non-constraint indexes as a list of index OIDs.
  *
@@ -566,4 +600,72 @@ chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
 								scankey, 2, chunk_index_tuple_set_tablespace,
 								   (char *) tablespace);
+}
+
+PG_FUNCTION_INFO_V1(chunk_index_recreate_create);
+Datum
+chunk_index_recreate_create(PG_FUNCTION_ARGS)
+{
+	Oid			chunk_index_oid = PG_GETARG_OID(0);
+	Relation	index_rel;
+	Relation	chunk_rel;
+	Oid			constraint_oid;
+	Oid			new_chunk_indexrelid;
+
+	index_rel = relation_open(chunk_index_oid, AccessShareLock);
+
+	/* Need ShareLock on the heap relation we are creating indexes on */
+	chunk_rel = relation_open(index_rel->rd_index->indrelid, ShareLock);
+
+	constraint_oid = get_constraint_oid(index_rel);
+
+	new_chunk_indexrelid = chunk_relation_index_create(index_rel, chunk_rel, OidIsValid(constraint_oid));
+
+	relation_close(chunk_rel, NoLock);
+
+	relation_close(index_rel, AccessShareLock);
+
+	PG_RETURN_OID(new_chunk_indexrelid);
+}
+
+PG_FUNCTION_INFO_V1(chunk_index_recreate_rename);
+Datum
+chunk_index_recreate_rename(PG_FUNCTION_ARGS)
+{
+	Oid			chunk_index_oid_old = PG_GETARG_OID(0);
+	Oid			chunk_index_oid_new = PG_GETARG_OID(1);
+	Relation	index_rel;
+
+	Oid			constraint_oid;
+	char	   *name;
+
+	index_rel = relation_open(chunk_index_oid_old, ShareLock);
+
+	name = pstrdup(RelationGetRelationName(index_rel));
+	constraint_oid = get_constraint_oid(index_rel);
+
+	relation_close(index_rel, ShareLock);
+
+	if (OidIsValid(constraint_oid))
+	{
+		ObjectAddress constraintobj = {
+			.classId = ConstraintRelationId,
+			.objectId = constraint_oid,
+		};
+
+		performDeletion(&constraintobj, DROP_RESTRICT, 0);
+	}
+	else
+	{
+		ObjectAddress idxobj = {
+			.classId = RelationRelationId,
+			.objectId = chunk_index_oid_old,
+		};
+
+		performDeletion(&idxobj, DROP_RESTRICT, 0);
+	}
+
+	RenameRelationInternal(chunk_index_oid_new, name, false);
+
+	PG_RETURN_VOID();
 }

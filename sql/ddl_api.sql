@@ -301,3 +301,87 @@ BEGIN
     PERFORM _timescaledb_internal.attach_tablespace(hypertable_id, tablespace);
 END
 $BODY$;
+
+--reindex only some chunks of a hypertable
+--main_table is the hypertable
+--index_oid is the index on a hypertable to reindex (NULL for all)
+--from_time is a lower bound for the time filter on a chunk
+--to_time is a upper bound for the time filter on a chunk
+--verbose is a flag to indicate whether to output a notice for each index processed
+--recreate is a flag to force a CREATE INDEX followed by a DROP INDEX instead of a REINDEX.
+----A reindex locks out reads during the procedure if those reads use the index.
+----A recreate does not lock reads but may use more disk space.
+CREATE OR REPLACE FUNCTION reindex_chunk(
+    main_table REGCLASS,
+    index_oid REGCLASS = NULL,
+    from_time anyelement = NULL::bigint,
+    to_time   anyelement = NULL,
+    verbose   BOOLEAN = FALSE,
+    recreate  BOOLEAN = FALSE
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    hypertable_row _timescaledb_catalog.hypertable;
+    chunk_index_name NAME;
+    verbose_mod TEXT = '';
+    chunk_index_info RECORD;
+    recreate_state_info RECORD;
+    recreated_state_old OID[];
+    recreated_state_new OID[];
+    chunk_index_oid_new OID;
+    time_dimension_row _timescaledb_catalog.dimension;
+BEGIN
+    hypertable_row := _timescaledb_internal.hypertable_from_main_table(main_table);
+    time_dimension_row := _timescaledb_internal.dimension_get_time(hypertable_row.id);
+
+    FOR chunk_index_info IN
+        WITH chunks AS (
+            SELECT *
+            FROM _timescaledb_internal.get_chunks(
+                hypertable_row.id,
+                _timescaledb_internal.time_specification_to_internal(time_dimension_row.column_type, from_time, 'from_time'),
+                _timescaledb_internal.time_specification_to_internal(time_dimension_row.column_type, to_time, 'to_time')
+            )
+        ),
+        hypertable_idx AS (
+            SELECT relname AS name
+            FROM pg_index i
+            INNER JOIN pg_class c ON (c.OID = i.indexrelid)
+            WHERE indrelid = main_table
+            AND (i.indexrelid = index_oid OR index_oid IS NULL)
+        )
+        SELECT c.schema_name, _timescaledb_internal.get_chunk_index_class_oid(c, h.name) AS chunk_index_oid
+        FROM  chunks c, hypertable_idx h
+        LOOP
+            SELECT relname INTO STRICT chunk_index_name FROM pg_class WHERE OID = chunk_index_info.chunk_index_oid;
+            IF recreate THEN
+                -- the recreate phase is split into 2 parts a (1) CREATE INDEX followed by  (2) DROP INDEX + RENAME INDEX.
+                -- you want to do phase 1 on all indexes before starting phase 2 since phase 2 takes heavy locks but is quick.
+                SELECT _timescaledb_internal.chunk_index_recreate_create(chunk_index_info.chunk_index_oid)
+                INTO chunk_index_oid_new;
+
+                IF "verbose" = true THEN
+                    RAISE INFO 'a new index was created for index "%"', chunk_index_name;
+                END IF;
+                recreated_state_old := recreated_state_old || chunk_index_info.chunk_index_oid;
+                recreated_state_new := recreated_state_new || chunk_index_oid_new;
+            ELSE
+                IF "verbose" THEN
+                    verbose_mod := '(VERBOSE)';
+                END IF;
+                EXECUTE FORMAT($$ REINDEX %s INDEX %I.%I $$, verbose_mod, chunk_index_info.schema_name, chunk_index_name);
+            END IF;
+    END LOOP;
+
+    FOR recreate_state_info IN SELECT unnest(recreated_state_old) AS old_oid,  unnest(recreated_state_new) AS new_oid
+        LOOP
+        -- phase 2 of recreate index
+        SELECT relname INTO STRICT chunk_index_name FROM pg_class WHERE OID = recreate_state_info.old_oid;
+        PERFORM _timescaledb_internal.chunk_index_recreate_rename(recreate_state_info.old_oid, recreate_state_info.new_oid);
+        IF "verbose" = true THEN
+            RAISE INFO 'index "%" was renamed to use the new index', chunk_index_name;
+        END IF;
+    END LOOP;
+END
+$BODY$;

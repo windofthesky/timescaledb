@@ -94,3 +94,58 @@ BEGIN
     RETURN time_col_type;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_chunks(
+    hypertable_id INT,
+    from_time BIGINT,
+    to_time   BIGINT
+)
+    RETURNS SETOF _timescaledb_catalog.chunk LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT c.*
+        FROM _timescaledb_catalog.chunk c
+        INNER JOIN _timescaledb_internal.dimension_get_time(get_chunks.hypertable_id) time_dimension ON(true)
+        INNER JOIN _timescaledb_catalog.dimension_slice ds
+            ON (ds.dimension_id = time_dimension.id)
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc
+            ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+        WHERE (from_time IS NULL OR ds.range_start >= from_time) AND
+              (to_time IS NULL OR ds.range_end <= to_time) AND
+              c.hypertable_id = get_chunks.hypertable_id;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_chunk_index_class_oid(
+    chunk_row _timescaledb_catalog.chunk,
+    hypertable_idx_name NAME
+)
+    RETURNS SETOF OID LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT c.oid
+    FROM  _timescaledb_catalog.chunk_index ci
+    INNER JOIN pg_class c ON (c.relname = ci.index_name)
+    INNER JOIN pg_index i ON (c.oid = i.indexrelid AND i.indrelid = format('%I.%I', chunk_row.schema_name, chunk_row.table_name)::regclass)
+    WHERE chunk_id = chunk_row.id AND
+    hypertable_index_name = hypertable_idx_name
+
+    UNION ALL
+
+    SELECT chunk_index_class.oid
+    FROM _timescaledb_catalog.chunk_constraint cc
+    INNER JOIN pg_constraint con ON
+    (cc.constraint_name = con.conname AND con.conrelid = format('%I.%I', chunk_row.schema_name, chunk_row.table_name)::regclass)
+    INNER JOIN pg_class chunk_index_class ON (chunk_index_class.oid = con.conindid)
+    WHERE cc.chunk_id = chunk_row.id AND
+    cc.hypertable_constraint_name =
+    (
+        SELECT hyper_con.conname
+        FROM pg_constraint hyper_con
+        INNER JOIN pg_class hyper_index_class ON (hyper_index_class.oid = hyper_con.conindid)
+        WHERE
+        hyper_con.conrelid = (
+            SELECT format ('%I.%I', h.schema_name, h.table_name)::regclass
+            FROM _timescaledb_catalog.hypertable h
+            WHERE h.id = chunk_row.hypertable_id
+        )
+        AND hyper_index_class.relname = hypertable_idx_name
+    );
+$BODY$;

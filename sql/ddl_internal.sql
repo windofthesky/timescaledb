@@ -500,3 +500,11 @@ BEGIN
     END LOOP;
 END
 $BODY$;
+
+
+--documentation of these function located in chunk_index.h
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_recreate_create(chunk_index_oid OID) RETURNS OID
+AS '$libdir/timescaledb', 'chunk_index_recreate_create' LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_recreate_rename(chunk_index_oid_old OID, chunk_index_oid_new OID) RETURNS VOID
+AS '$libdir/timescaledb', 'chunk_index_recreate_rename' LANGUAGE C IMMUTABLE STRICT;

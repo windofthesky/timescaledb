@@ -1,4 +1,4 @@
-CREATE TABLE reindex_test(time timestamp, temp float);
+CREATE TABLE reindex_test(time timestamp, temp float, PRIMARY KEY(time, temp));
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 -- create hypertable with three chunks
 SELECT create_hypertable('reindex_test', 'time', chunk_time_interval => 2628000000000);
@@ -17,9 +17,10 @@ INSERT INTO reindex_test VALUES ('2017-01-20T09:00:01', 17.5),
                                Table "public.reindex_test"
  Column |            Type             | Modifiers | Storage | Stats target | Description 
 --------+-----------------------------+-----------+---------+--------------+-------------
- time   | timestamp without time zone |           | plain   |              | 
- temp   | double precision            |           | plain   |              | 
+ time   | timestamp without time zone | not null  | plain   |              | 
+ temp   | double precision            | not null  | plain   |              | 
 Indexes:
+    "reindex_test_pkey" PRIMARY KEY, btree ("time", temp)
     "reindex_test_time_unique_idx" UNIQUE, btree ("time")
 Child tables: _timescaledb_internal._hyper_1_1_chunk,
               _timescaledb_internal._hyper_1_2_chunk,
@@ -27,8 +28,11 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk,
 
 -- show reindexing
 REINDEX (VERBOSE) TABLE reindex_test;
+INFO:  index "1_1_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "2_2_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "3_3_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was reindexed
 \set ON_ERROR_STOP 0
 -- this one currently doesn't recurse to chunks and instead gives an
@@ -49,3 +53,120 @@ REINDEX (VERBOSE) TABLE reindex_norm;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
 REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
+\d+ _timescaledb_internal._hyper_1_1_chunk
+                     Table "_timescaledb_internal._hyper_1_1_chunk"
+ Column |            Type             | Modifiers | Storage | Stats target | Description 
+--------+-----------------------------+-----------+---------+--------------+-------------
+ time   | timestamp without time zone | not null  | plain   |              | 
+ temp   | double precision            | not null  | plain   |              | 
+Indexes:
+    "1_1_reindex_test_pkey" PRIMARY KEY, btree ("time", temp)
+    "_hyper_1_1_chunk_reindex_test_time_unique_idx" UNIQUE, btree ("time")
+Check constraints:
+    "constraint_1" CHECK ("time" >= 'Thu Jan 19 02:00:00 2017'::timestamp without time zone AND "time" < 'Sat Feb 18 12:00:00 2017'::timestamp without time zone)
+Inherits: reindex_test
+
+SELECT indexrelid AS original_indexoid FROM pg_index WHERE indexrelid = '_timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx'::regclass
+\gset
+SELECT reindex_chunk('reindex_test', verbose=>true);
+INFO:  index "1_1_reindex_test_pkey" was reindexed
+INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "2_2_reindex_test_pkey" was reindexed
+INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "3_3_reindex_test_pkey" was reindexed
+INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was reindexed
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+SELECT indexrelid AS reindex_indexoid FROM pg_index WHERE indexrelid = '_timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx'::regclass
+\gset
+SELECT :original_indexoid = :reindex_indexoid;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT reindex_chunk('reindex_test', verbose=>true, recreate=>true);
+INFO:  a new index was created for index "1_1_reindex_test_pkey"
+INFO:  a new index was created for index "_hyper_1_1_chunk_reindex_test_time_unique_idx"
+INFO:  a new index was created for index "2_2_reindex_test_pkey"
+INFO:  a new index was created for index "_hyper_1_2_chunk_reindex_test_time_unique_idx"
+INFO:  a new index was created for index "3_3_reindex_test_pkey"
+INFO:  a new index was created for index "_hyper_1_3_chunk_reindex_test_time_unique_idx"
+INFO:  index "1_1_reindex_test_pkey" was renamed to use the new index
+INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was renamed to use the new index
+INFO:  index "2_2_reindex_test_pkey" was renamed to use the new index
+INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was renamed to use the new index
+INFO:  index "3_3_reindex_test_pkey" was renamed to use the new index
+INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was renamed to use the new index
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+SELECT indexrelid AS remake_indexoid FROM pg_index WHERE indexrelid = '_timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx'::regclass
+\gset
+SELECT :original_indexoid = :remake_indexoid;
+ ?column? 
+----------
+ f
+(1 row)
+
+--reindex only a particular index
+SELECT reindex_chunk('reindex_test', 'reindex_test_pkey', verbose=>true, recreate=>true);
+INFO:  a new index was created for index "1_1_reindex_test_pkey"
+INFO:  a new index was created for index "2_2_reindex_test_pkey"
+INFO:  a new index was created for index "3_3_reindex_test_pkey"
+INFO:  index "1_1_reindex_test_pkey" was renamed to use the new index
+INFO:  index "2_2_reindex_test_pkey" was renamed to use the new index
+INFO:  index "3_3_reindex_test_pkey" was renamed to use the new index
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+--from_time
+SELECT reindex_chunk('reindex_test', 'reindex_test_pkey', TIMESTAMP '2017-06-20T07:00:01', verbose=>true, recreate=>true);
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+--to_time (note awkwardness with having to declare a NULL from_time)
+SELECT reindex_chunk('reindex_test', 'reindex_test_pkey', NULL::timestamp, TIMESTAMP '2017-02-18 15:00:00', verbose=>true, recreate=>true);
+INFO:  a new index was created for index "1_1_reindex_test_pkey"
+INFO:  index "1_1_reindex_test_pkey" was renamed to use the new index
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+--both from and to time
+SELECT reindex_chunk('reindex_test', 'reindex_test_pkey', '2017-01-19 05:00:00'::timestamp, TIMESTAMP '2017-02-18 15:00:00', verbose=>true, recreate=>true);
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+--empty set
+SELECT reindex_chunk('reindex_test', 'reindex_test_pkey', '2017-01-19 06:00:00'::timestamp, TIMESTAMP '2017-02-18 15:00:00', verbose=>true, recreate=>true);
+ reindex_chunk 
+---------------
+ 
+(1 row)
+
+\d+ _timescaledb_internal._hyper_1_1_chunk
+                     Table "_timescaledb_internal._hyper_1_1_chunk"
+ Column |            Type             | Modifiers | Storage | Stats target | Description 
+--------+-----------------------------+-----------+---------+--------------+-------------
+ time   | timestamp without time zone | not null  | plain   |              | 
+ temp   | double precision            | not null  | plain   |              | 
+Indexes:
+    "1_1_reindex_test_pkey" PRIMARY KEY, btree ("time", temp)
+    "_hyper_1_1_chunk_reindex_test_time_unique_idx" UNIQUE, btree ("time")
+Check constraints:
+    "constraint_1" CHECK ("time" >= 'Thu Jan 19 02:00:00 2017'::timestamp without time zone AND "time" < 'Sat Feb 18 12:00:00 2017'::timestamp without time zone)
+Inherits: reindex_test
+
