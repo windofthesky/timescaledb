@@ -40,7 +40,7 @@ Indexes:
     "_hyper_1_1_chunk_part_legacy_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_1" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= '1073741824'::bigint AND _timescaledb_internal.get_partition_for_key(device::text) < '2147483648'::bigint)
 Inherits: part_legacy
 
                     Table "_timescaledb_internal._hyper_1_2_chunk"
@@ -54,7 +54,7 @@ Indexes:
     "_hyper_1_2_chunk_part_legacy_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_1" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
-    "constraint_3" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 0 AND _timescaledb_internal.get_partition_for_key(device::text) < 1073741823)
+    "constraint_3" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= '0'::bigint AND _timescaledb_internal.get_partition_for_key(device::text) < '1073741824'::bigint)
 Inherits: part_legacy
 
 -- Make sure constraint exclusion works on device column
@@ -103,7 +103,7 @@ Indexes:
     "_hyper_2_3_chunk_part_new_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_4" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
-    "constraint_5" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
+    "constraint_5" CHECK (_timescaledb_internal.get_partition_hash(device) >= '0'::bigint AND _timescaledb_internal.get_partition_hash(device) < '1073741824'::bigint)
 Inherits: part_new
 
                     Table "_timescaledb_internal._hyper_2_4_chunk"
@@ -117,7 +117,7 @@ Indexes:
     "_hyper_2_4_chunk_part_new_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_4" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
-    "constraint_6" CHECK (_timescaledb_internal.get_partition_hash(device) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device) < 2147483647)
+    "constraint_6" CHECK (_timescaledb_internal.get_partition_hash(device) >= '1073741824'::bigint AND _timescaledb_internal.get_partition_hash(device) < '2147483648'::bigint)
 Inherits: part_new
 
 -- Make sure constraint exclusion works on device column
@@ -161,6 +161,6 @@ Indexes:
     "_hyper_3_5_chunk_part_new_convert1_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_7" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017'::timestamp without time zone AND "time" < 'Fri Mar 24 17:00:00 2017'::timestamp without time zone)
-    "constraint_8" CHECK (_timescaledb_internal.get_partition_hash(temp) >= 0 AND _timescaledb_internal.get_partition_hash(temp) < 1073741823)
+    "constraint_8" CHECK (_timescaledb_internal.get_partition_hash(temp) >= '0'::bigint AND _timescaledb_internal.get_partition_hash(temp) < '1073741824'::bigint)
 Inherits: part_new_convert1
 

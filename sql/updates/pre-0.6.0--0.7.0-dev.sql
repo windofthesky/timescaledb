@@ -24,3 +24,5 @@ INNER JOIN pg_constraint pg_hypertable_con ON (
 INNER JOIN pg_class pg_hypertable_index_class ON (
     pg_hypertable_con.conindid = pg_hypertable_index_class.oid
 );
+
+UPDATE _timescaledb_catalog.dimension_slice SET range_end = 2147483648 WHERE range_end = 2147483647;
