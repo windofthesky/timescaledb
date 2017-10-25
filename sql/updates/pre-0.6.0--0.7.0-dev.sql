@@ -26,3 +26,6 @@ INNER JOIN pg_class pg_hypertable_index_class ON (
 );
 
 UPDATE _timescaledb_catalog.dimension_slice SET range_end = 2147483648 WHERE range_end = 2147483647;
+UPDATE _timescaledb_catalog.dimension_slice SET range_start = 0 WHERE range_start = -1;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.range_value_to_pretty(BIGINT, regtype);

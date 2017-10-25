@@ -67,12 +67,16 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
     time_value      BIGINT,
-    column_type     REGTYPE
+    column_type     REGTYPE,
+    is_open         BOOLEAN
 )
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
 BEGIN
+    IF NOT is_open AND NOT _timescaledb_internal.closed_dimension_is_finite(time_value) THEN
+        RETURN '';
+    END IF;
     IF time_value IS NULL THEN
         RETURN format('%L', NULL);
     END IF;
@@ -312,9 +316,9 @@ BEGIN
                array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
                array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,
                array_agg(d.partitioning_func_schema || '.' || d.partitioning_func ORDER BY d.interval_length, d.column_name ASC) as partitioning_functions,
-               array_agg('[' || _timescaledb_internal.range_value_to_pretty(range_start, column_type) ||
+               array_agg('[' || _timescaledb_internal.range_value_to_pretty(range_start, column_type, partitioning_func IS NULL) ||
                          ',' ||
-                         _timescaledb_internal.range_value_to_pretty(range_end, column_type) || ')' ORDER BY d.interval_length, d.column_name ASC) as ranges
+                         _timescaledb_internal.range_value_to_pretty(range_end, column_type, partitioning_func IS NULL) || ')' ORDER BY d.interval_length, d.column_name ASC) as ranges
                FROM
                _timescaledb_catalog.hypertable h,
                _timescaledb_catalog.chunk c,

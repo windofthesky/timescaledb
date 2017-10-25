@@ -1,6 +1,9 @@
 #ifndef TIMESCALEDB_DIMENSION_SLICE_H
 #define TIMESCALEDB_DIMENSION_SLICE_H
 
+#define DIMENSION_SLICE_MAXVALUE ((int64)PG_INT32_MAX + 1)
+#define DIMENSION_SLICE_MINVALUE ((int64) -1)
+
 #include <postgres.h>
 #include <nodes/pg_list.h>
 

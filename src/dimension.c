@@ -143,8 +143,6 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 	return HeapTupleGetDatum(tuple);
 }
 
-#define RANGE_VALUE_MAX ((int64)PG_INT32_MAX + 1)
-
 static DimensionSlice *
 calculate_open_range_default(Dimension *dim, int64 value)
 {
@@ -192,7 +190,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 				range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int64		interval = RANGE_VALUE_MAX / ((int64)dim->fd.num_slices);
+	int64		interval = DIMENSION_SLICE_MAXVALUE / ((int64) dim->fd.num_slices);
 
 	if (value < 0)
 		elog(ERROR, "Invalid value " INT64_FORMAT " for closed dimension", value);
@@ -201,12 +199,16 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 	{
 		/* put overflow from integer-division errors in last range */
 		range_start = interval * (dim->fd.num_slices - 1);
-		range_end = RANGE_VALUE_MAX;
+		range_end = DIMENSION_SLICE_MAXVALUE;
 	}
 	else
 	{
 		range_start = (value / interval) * interval;
 		range_end = range_start + interval;
+		if (range_start == 0)
+		{
+			range_start = DIMENSION_SLICE_MINVALUE;
+		}
 	}
 
 	return dimension_slice_create(dim->fd.id, range_start, range_end);

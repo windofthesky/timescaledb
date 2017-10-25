@@ -74,6 +74,15 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.closed_dimension_is_finite(
+    val      BIGINT
+)
+    RETURNS BOOLEAN LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT val >= 0 AND val <= 2147483647
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql(
     dimension_slice_id  INTEGER
 )
@@ -84,6 +93,7 @@ DECLARE
     dimension_row _timescaledb_catalog.dimension;
     proargtype  OID;
     typecast TEXT = '';
+    parts TEXT[]; 
 BEGIN
     SELECT * INTO STRICT dimension_slice_row
     FROM _timescaledb_catalog.dimension_slice
@@ -106,16 +116,31 @@ BEGIN
             typecast := '::text';
         END IF;
 
-        return format(
+        IF  _timescaledb_internal.closed_dimension_is_finite(dimension_slice_row.range_start) THEN
+            parts = parts || format(
             $$
-                %1$I.%2$s(%3$I%4$s) >= %5$L::bigint AND %1$I.%2$s(%3$I%4$s) <  %6$L::bigint
+                %1$I.%2$I(%3$I%4$s) >= %5$L
             $$,
-            dimension_row.partitioning_func_schema,
+            dimension_row.partitioning_func_schema, 
+            dimension_row.partitioning_func,
+            dimension_row.column_name, 
+            typecast,
+            dimension_slice_row.range_start);
+        END IF;
+
+        IF _timescaledb_internal.closed_dimension_is_finite(dimension_slice_row.range_end) THEN
+            parts = parts || format(
+            $$
+                %1$I.%2$I(%3$I%4$s) < %5$L
+            $$,
+            dimension_row.partitioning_func_schema, 
             dimension_row.partitioning_func,
             dimension_row.column_name,
             typecast,
-            dimension_slice_row.range_start,
             dimension_slice_row.range_end);
+        END IF;
+
+        return array_to_string(parts, 'AND');
     ELSE
         --TODO: only works with time for now
         IF _timescaledb_internal.time_literal_sql(dimension_slice_row.range_start, dimension_row.column_type) =
