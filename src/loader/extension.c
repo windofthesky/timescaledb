@@ -3,6 +3,7 @@
 #include <commands/extension.h>
 #include <catalog/namespace.h>
 #include <utils/lsyscache.h>
+#include <miscadmin.h>
 
 #include "extension.h"
 #include "load.h"
@@ -12,7 +13,7 @@
 
 static bool loaded = false;
 
-static bool
+static bool inline
 proxy_table_exists()
 {
 	Oid			nsid = get_namespace_oid(CACHE_SCHEMA_NAME, true);
@@ -21,21 +22,49 @@ proxy_table_exists()
 	return OidIsValid(proxy_table);
 }
 
-static bool
+static bool inline
 extension_exists()
 {
 	return OidIsValid(get_extension_oid(EXTENSION_NAME, true));
 }
 
-void
+static bool inline
+extension_is_transitioning() {
+	/*
+	 * Determine whether the extension is being created or upgraded
+	 * (as a misnomer creating_extension is true during upgrades)
+	 * */
+	if (creating_extension)
+	{
+		Oid			extension_oid = get_extension_oid(EXTENSION_NAME, true);
+
+		if (!OidIsValid(extension_oid))
+		{
+			/* be conservative */
+			return true;
+		}
+
+		if (extension_oid == CurrentExtensionObject)
+			return true;
+	}
+	return false;
+}
+
+void inline
 extension_check()
 {
 	if (!loaded)
 	{
-		if (IsTransactionState() && proxy_table_exists() && extension_exists())
+		if (IsNormalProcessingMode() && IsTransactionState() && !extension_is_transitioning() && proxy_table_exists() && extension_exists())
 		{
 			load_extension();
 			loaded = true;
 		}
 	}
+}
+
+bool inline
+extension_loaded()
+{
+	return loaded;
 }

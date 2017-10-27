@@ -4,5 +4,6 @@
 #define EXTENSION_NAME "timescaledb"
 
 void		extension_check(void);
+bool		extension_loaded(void);
 
 #endif   /* TIMESCALEDB_EXTENSION_H */
