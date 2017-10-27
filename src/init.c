@@ -49,7 +49,10 @@ extern void _PG_fini(void);
 void
 _PG_init(void)
 {
-	/* elog(INFO, "timescaledb version %s loaded", TIMESCALEDB_EXT_BUILD_VERSION); */
+	/*
+	 * elog(INFO, "timescaledb version %s loaded",
+	 * TIMESCALEDB_EXT_BUILD_VERSION);
+	 */
 	_chunk_dispatch_info_init();
 	_cache_init();
 	_hypertable_cache_init();

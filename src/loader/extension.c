@@ -29,11 +29,12 @@ extension_exists()
 }
 
 static bool inline
-extension_is_transitioning() {
+extension_is_transitioning()
+{
 	/*
-	 * Determine whether the extension is being created or upgraded
-	 * (as a misnomer creating_extension is true during upgrades)
-	 * */
+	 * Determine whether the extension is being created or upgraded (as a
+	 * misnomer creating_extension is true during upgrades)
+	 */
 	if (creating_extension)
 	{
 		Oid			extension_oid = get_extension_oid(EXTENSION_NAME, true);
@@ -50,7 +51,7 @@ extension_is_transitioning() {
 	return false;
 }
 
-void inline
+void		inline
 extension_check()
 {
 	if (!loaded)
@@ -63,7 +64,7 @@ extension_check()
 	}
 }
 
-bool inline
+bool		inline
 extension_loaded()
 {
 	return loaded;
