@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
-AS 'MODULE_PATHNAME', 'timescaledb_ddl_command_end' LANGUAGE C IMMUTABLE STRICT;
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C IMMUTABLE STRICT;
 
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 --EVENT TRIGGER MUST exclude the ALTER EXTENSION tag.

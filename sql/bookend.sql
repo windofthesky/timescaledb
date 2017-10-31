@@ -1,36 +1,36 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS 'MODULE_PATHNAME', 'first_sfunc'
+AS '@MODULE_PATHNAME@', 'first_sfunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
-AS 'MODULE_PATHNAME', 'first_combinefunc'
+AS '@MODULE_PATHNAME@', 'first_combinefunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS 'MODULE_PATHNAME', 'last_sfunc'
+AS '@MODULE_PATHNAME@', 'last_sfunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
-AS 'MODULE_PATHNAME', 'last_combinefunc'
+AS '@MODULE_PATHNAME@', 'last_combinefunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
-AS 'MODULE_PATHNAME', 'bookend_finalfunc'
+AS '@MODULE_PATHNAME@', 'bookend_finalfunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
-AS 'MODULE_PATHNAME', 'bookend_serializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_serializefunc'
 LANGUAGE C IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
-AS 'MODULE_PATHNAME', 'bookend_deserializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_deserializefunc'
 LANGUAGE C IMMUTABLE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.

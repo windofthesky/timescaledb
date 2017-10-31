@@ -8,11 +8,24 @@ file(STRINGS extra_extension_files.txt EXT_SQL_EXTRA_FILES)
 file(STRINGS load_order.txt SQL_FILES)
 set(UPDATE_FILE_LIST ${EXT_SQL_UPDATE_PRE_GLOBAL_FILE} ${EXT_SQL_UPDATE_PRE_FILE} ${SQL_FILES} ${EXT_SQL_UPDATE_POST_FILE}  ${EXT_SQL_UPDATE_POST_GLOBAL_FILE})
 
+set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
+set(UPDATE_FILE_LIST_VERSIONED "")
+set(SQL_FILES_VERSIONED "")
+FOREACH(update_file ${UPDATE_FILE_LIST})
+  set(update_file_versioned ${update_file}.${PROJECT_VERSION_MOD})
+  message("here  ${update_file_versioned} ")
+  configure_file(${update_file} ${update_file_versioned} @ONLY)
+  list(APPEND UPDATE_FILE_LIST_VERSIONED ${CMAKE_CURRENT_BINARY_DIR}/${update_file_versioned})
+  if (${update_file} IN_LIST SQL_FILES)
+    list(APPEND SQL_FILES_VERSIONED ${CMAKE_CURRENT_BINARY_DIR}/${update_file_versioned})
+  endif()
+ENDFOREACH(update_file)
+
 if (WIN32)
   # Make list of files into string of files separated by "+"
   # to make Windows copy concatenate them
-  string(REPLACE ";" ";+" SQL_FILES_JOINED "${SQL_FILES}")
-  string(REPLACE ";" ";+" UPDATE_FILES_JOINED "${UPDATE_FILE_LIST}")
+  string(REPLACE ";" ";+" SQL_FILES_JOINED "${SQL_FILES_VERSIONED}")
+  string(REPLACE ";" ";+" UPDATE_FILES_JOINED "${UPDATE_FILE_LIST_VERSIONED}")
   # Windows copy command requires backslashes for relative paths
   string(REPLACE "/" "\\" EXT_SQL_UPDATE_PRE_FILE "${EXT_SQL_UPDATE_PRE_FILE}")
   string(REPLACE "/" "\\" EXT_SQL_UPDATE_POST_FILE "${EXT_SQL_UPDATE_POST_FILE}")
@@ -20,8 +33,8 @@ if (WIN32)
   set(CAT_SQL_FILE_CMD copy /y ${SQL_FILES_JOINED} "\"${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE}\"" >NUL)
   set(CAT_SQL_UPDATE_FILE_CMD copy /y ${UPDATE_FILES_JOINED} "\"${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE}\"" >NUL)
 else ()
-  set(CAT_SQL_FILE_CMD cat ${SQL_FILES} > ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE})
-  set(CAT_SQL_UPDATE_FILE_CMD cat ${UPDATE_FILE_LIST} > ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE})
+  set(CAT_SQL_FILE_CMD cat ${SQL_FILES_VERSIONED} > ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE})
+  set(CAT_SQL_UPDATE_FILE_CMD cat ${UPDATE_FILE_LIST_VERSIONED} > ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE})
 endif ()
 
 # Command and target for the SQL file
@@ -32,12 +45,13 @@ add_custom_command(
   COMMAND ${CAT_SQL_FILE_CMD}
   COMMENT "Generating ${EXT_SQL_FILE}")
 
+
 add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE})
 
 # Command and target for the update SQL file
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE}
-  DEPENDS ${SQL_FILES} ${EXT_SQL_UPDATE_PRE_FILE} ${EXT_SQL_UPDATE_POST_FILE}
+  DEPENDS ${UPDATE_FILE_LIST}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMAND ${CAT_SQL_UPDATE_FILE_CMD}
   COMMENT "Generating ${EXT_SQL_UPDATE_FILE}")
